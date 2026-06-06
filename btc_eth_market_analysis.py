@@ -32,14 +32,10 @@ MY_COINS = {
 WATCHLIST = {
     'cosmos': 'ATOM',
     'chainlink': 'LINK',
-    'polygon': 'MATIC',
-    'aptos': 'APT',
-    'sui': 'SUI',
     'near': 'NEAR',
     'litecoin': 'LTC',
     'arbitrum': 'ARB',
-    'optimism': 'OP',
-    'algorand': 'ALGO'
+    'optimism': 'OP',    
 }
 
 def get_data(coin_id, days=30):
