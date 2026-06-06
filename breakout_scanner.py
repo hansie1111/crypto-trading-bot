@@ -13,37 +13,18 @@ RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL', 'hansiepansie007@gmail.com')
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Grote lijst met coins om te scannen
+# Jouw 11 coins
 COINS_TO_SCAN = {
-    'solana': 'SOL',
-    'cardano': 'ADA',
     'polkadot': 'DOT',
     'chainlink': 'LINK',
-    'polygon': 'MATIC',
-    'uniswap': 'UNI',
     'litecoin': 'LTC',
     'near': 'NEAR',
-    'aptos': 'APT',
     'arbitrum': 'ARB',
     'optimism': 'OP',
     'sui': 'SUI',
     'celestia': 'TIA',
-    'stacks': 'STX',
-    'immutable-x': 'IMX',
-    'the-graph': 'GRT',
-    'fantom': 'FTM',
     'algorand': 'ALGO',
     'cosmos': 'ATOM',
-    'hedera-hashgraph': 'HBAR',
-    'injective-protocol': 'INJ',
-    'render-token': 'RENDER',
-    'fetch-ai': 'FET',
-    'theta-token': 'THETA',
-    'vechain': 'VET',
-    'filecoin': 'FIL',
-    'tron': 'TRX',
-    'ethereum-classic': 'ETC',
-    'monero': 'XMR',
     'stellar': 'XLM'
 }
 
@@ -51,19 +32,37 @@ def get_data(coin_id, days=30):
     url = "https://api.coingecko.com/api/v3/coins/" + coin_id + "/market_chart"
     params = {'vs_currency': 'usd', 'days': days, 'interval': 'daily'}
     
-    try:
-        time.sleep(2)
-        r = requests.get(url, params=params, timeout=15)
-        
-        if r.status_code == 200:
-            data = r.json()
-            if 'prices' in data and len(data['prices']) >= 14:
-                df = pd.DataFrame(data['prices'], columns=['time', 'price'])
-                df['time'] = pd.to_datetime(df['time'], unit='ms')
-                df.set_index('time', inplace=True)
-                return df
-    except:
-        pass
+    for attempt in range(2):
+        try:
+            time.sleep(8)  # 8 seconden tussen elke request
+            print("    Wacht 8 seconden...")
+            
+            r = requests.get(url, params=params, timeout=20)
+            
+            if r.status_code == 429:
+                print("    Rate limit! Wacht 30 seconden...")
+                time.sleep(30)
+                continue
+            
+            if r.status_code == 200:
+                data = r.json()
+                if 'prices' in data and len(data['prices']) >= 14:
+                    df = pd.DataFrame(data['prices'], columns=['time', 'price'])
+                    df['time'] = pd.to_datetime(df['time'], unit='ms')
+                    df.set_index('time', inplace=True)
+                    print("    ✓ Succes!")
+                    return df
+                else:
+                    print("    ✗ Onvoldoende data")
+            else:
+                print("     HTTP error: " + str(r.status_code))
+                
+        except requests.exceptions.Timeout:
+            print("    ✗ Time-out!")
+            time.sleep(10)
+        except Exception as e:
+            print("    ✗ Fout: " + str(e))
+            time.sleep(10)
     
     return None
 
@@ -97,9 +96,7 @@ def detect_breakout(df, coin_name):
     price = df['price'].iloc[-1]
     high_14d = df['price'].rolling(window=14).max().iloc[-1]
     low_14d = df['price'].rolling(window=14).min().iloc[-1]
-    high_7d = df['price'].rolling(window=7).max().iloc[-1]
     
-    ch_1d = ((price - df['price'].iloc[-1]) / df['price'].iloc[-1]) * 100 if len(df) >= 1 else 0
     ch_3d = ((price - df['price'].iloc[-3]) / df['price'].iloc[-3]) * 100 if len(df) >= 3 else 0
     ch_7d = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
     ch_14d = ((price - df['price'].iloc[-14]) / df['price'].iloc[-14]) * 100 if len(df) >= 14 else 0
@@ -110,7 +107,6 @@ def detect_breakout(df, coin_name):
     distance_to_resistance = ((high_14d - price) / high_14d) * 100
     distance_from_support = ((price - low_14d) / low_14d) * 100
     
-    # Breakout score berekenen
     score = 0
     signals = []
     
@@ -160,11 +156,9 @@ def detect_breakout(df, coin_name):
     
     return {
         'name': coin_name,
-        'coin_id': coin_name,
         'price': price,
         'rsi': rsi,
         'trend': trend,
-        'ch_1d': ch_1d,
         'ch_3d': ch_3d,
         'ch_7d': ch_7d,
         'ch_14d': ch_14d,
@@ -196,7 +190,7 @@ def send_email(subject, body):
         return False
 
 if __name__ == "__main__":
-    print("🎯 BREAKOUT SCANNER GESTART...")
+    print(" BREAKOUT SCANNER GESTART...")
     print("Scan " + str(len(COINS_TO_SCAN)) + " coins...")
     
     subject = "🔥 BREAKOUT ALERT - " + datetime.now().strftime('%d-%m-%Y %H:%M')
@@ -209,7 +203,7 @@ if __name__ == "__main__":
     
     print("\nScannen...")
     for coin_id, coin_name in COINS_TO_SCAN.items():
-        print("  " + coin_name + "...")
+        print("\n  " + coin_name + "...")
         df = get_data(coin_id, 30)
         
         if df is not None:
@@ -225,7 +219,7 @@ if __name__ == "__main__":
     all_results.sort(key=lambda x: x['score'], reverse=True)
     
     # 🟢 TOP BREAKOUTS (Score 8+)
-    body += "🟢 TOP BREAKOUT KANDIDATEN (Score 8+):\n"
+    body += " TOP BREAKOUT KANDIDATEN (Score 8+):\n"
     body += "-" * 80 + "\n\n"
     
     top_breakouts = [r for r in all_results if r['score'] >= 8]
@@ -234,9 +228,9 @@ if __name__ == "__main__":
         for i, coin in enumerate(top_breakouts[:10], 1):
             body += str(i) + ". 🔥 " + coin['name'].upper() + " - Score: " + str(coin['score']) + "/15\n"
             body += "   💰 Prijs: $" + str(round(coin['price'], 4)) + "\n"
-            body += "   📊 1d: " + str(round(coin['ch_1d'], 2)) + "%"
-            body += " | 3d: " + str(round(coin['ch_3d'], 2)) + "%"
-            body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%\n"
+            body += "   📊 3d: " + str(round(coin['ch_3d'], 2)) + "%"
+            body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
+            body += " | 14d: " + str(round(coin['ch_14d'], 2)) + "%\n"
             body += "   📈 RSI: " + str(round(coin['rsi'], 1))
             body += " | " + coin['trend']
             body += " | Distance: " + str(round(coin['distance_to_res'], 2)) + "%\n"
@@ -257,7 +251,7 @@ if __name__ == "__main__":
     watchlist = [r for r in all_results if 5 <= r['score'] < 8]
     
     if watchlist:
-        for coin in watchlist[:15]:
+        for coin in watchlist:
             body += "⚪ " + coin['name'].upper() + ": $" + str(round(coin['price'], 4))
             body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
             body += " | RSI: " + str(round(coin['rsi'], 1))
@@ -270,16 +264,14 @@ if __name__ == "__main__":
     body += "📊 SCAN STATISTIEKEN\n"
     body += "=" * 80 + "\n\n"
     
-    body += "Totaal gescand: " + str(len(all_results) + len(failed)) + " coins\n"
+    body += "Totaal gescand: " + str(len(COINS_TO_SCAN)) + " coins\n"
     body += "Succesvol: " + str(len(all_results)) + " coins\n"
     body += "Gefaald: " + str(len(failed)) + " coins\n"
     body += "Top breakouts (8+): " + str(len(top_breakouts)) + "\n"
     body += "Watchlist (5-7): " + str(len(watchlist)) + "\n"
     
     if failed:
-        body += "\n⚠️  Niet beschikbaar: " + ", ".join(failed[:10])
-        if len(failed) > 10:
-            body += " en " + str(len(failed) - 10) + " meer"
+        body += "\n⚠️  Niet beschikbaar: " + ", ".join(failed)
     
     body += "\n\n" + "=" * 80 + "\n"
     body += "💡 TIP: Houd deze coins in de gaten voor mogelijke breakouts!\n"
@@ -290,3 +282,5 @@ if __name__ == "__main__":
     print("\n✅ KLAAR! Email verstuurd.")
     print("Top breakouts: " + str(len(top_breakouts)))
     print("Watchlist: " + str(len(watchlist)))
+    if failed:
+        print("Gefaald: " + ", ".join(failed))
