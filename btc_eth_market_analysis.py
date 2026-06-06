@@ -35,7 +35,7 @@ def get_data(coin_id, days=60):
     
     for i in range(3):  # 3 pogingen
         try:
-            time.sleep(2)  # Langere wachtijd
+            time.sleep(3)  # Langere wachtijd
             r = requests.get(url, params=params, timeout=15)
             
             if r.status_code == 429:
