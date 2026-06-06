@@ -3,36 +3,22 @@ import pandas as pd
 import numpy as np
 import config
 import time
+import smtplib
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
 
-# ========================================
-# COIN IDs MAPPING (CORRECTE IDs)
-# ========================================
+# Email instellingen
+EMAIL_ADDRESS = os.environ.get('hansiepansie007@gmail.com', 'jouw_email@gmail.com')
+EMAIL_PASSWORD = os.environ.get('asdfg1111!!!!', 'jouw_app_password')
+RECEIVER_EMAIL = os.environ.get('hansiepansie009@gmail.com', 'jouw_email@gmail.com')
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 
-COIN_IDS = {
-    'bitcoin': 'BTC',
-    'ethereum': 'ETH',
-    'render-token': 'RENDER',
-    'avalanche-2': 'AVAX',
-    'wormhole': 'W',
-    'peaq': 'PEAQ',
-    'renzo': 'REZ',
-    'injective-protocol': 'INJ',
-    'centrifuge': 'CFG',
-    'fetch-ai': 'FET',
-    'dash': 'DASH',
-    'filecoin': 'FIL',
-    'ethereum-name-service': 'ENS'
-}
-
-# ========================================
-# DATA OPHALEN MET RETRIES
-# ========================================
-
-def get_historical_data(coin_id, days=60, max_retries=3):
+def get_historical_data(coin_id, days=60, max_retries=2):
     """Haal historische data op met retries"""
     
-    # Check voor handmatige prijs
     if coin_id in config.PORTFOLIO and 'manual_price' in config.PORTFOLIO[coin_id]:
         print("  (Handmatige prijs - skip analyse)")
         return None
@@ -47,9 +33,9 @@ def get_historical_data(coin_id, days=60, max_retries=3):
     for attempt in range(max_retries):
         try:
             print("  Poging " + str(attempt + 1) + "/" + str(max_retries) + "...")
-            time.sleep(3)  # Wacht 3 seconden (rate limit)
+            time.sleep(1)
             
-            response = requests.get(url, params=params, timeout=15)
+            response = requests.get(url, params=params, timeout=10)
             
             if response.status_code == 429:
                 print("  Rate limit! Wacht 10 seconden...")
@@ -58,7 +44,7 @@ def get_historical_data(coin_id, days=60, max_retries=3):
             
             if response.status_code != 200:
                 print("  HTTP error: " + str(response.status_code))
-                time.sleep(5)
+                time.sleep(2)
                 continue
             
             data = response.json()
@@ -76,13 +62,13 @@ def get_historical_data(coin_id, days=60, max_retries=3):
             
         except requests.exceptions.Timeout:
             print("  Time-out!")
-            time.sleep(5)
+            time.sleep(2)
         except requests.exceptions.RequestException as e:
             print("  Netwerkfout: " + str(e))
-            time.sleep(5)
+            time.sleep(2)
         except Exception as e:
             print("  Fout: " + str(e))
-            time.sleep(5)
+            time.sleep(2)
     
     return None
 
@@ -117,9 +103,27 @@ def get_trend(df):
     else:
         return "NEUTRAAL"
 
-# ========================================
-# BTC & ETH ANALYSE
-# ========================================
+def send_email_report(subject, body):
+    """Verstuur email rapport"""
+    
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL_ADDRESS
+    msg['To'] = RECEIVER_EMAIL
+    msg['Subject'] = subject
+    
+    msg.attach(MIMEText(body, 'plain'))
+    
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print("Email succesvol verstuurd!")
+        return True
+    except Exception as e:
+        print("Fout bij versturen: " + str(e))
+        return False
 
 def analyze_btc_eth():
     print("=" * 80)
@@ -140,7 +144,6 @@ def analyze_btc_eth():
         print("Fout: Kon geen BTC/ETH data ophalen!")
         return None, None, None
     
-    # BTC Analyse
     print("")
     print("=" * 80)
     print("BITCOIN (BTC)")
@@ -160,7 +163,6 @@ def analyze_btc_eth():
     print("RSI: " + str(round(btc_rsi, 1)))
     print("Trend: " + btc_trend)
     
-    # ETH Analyse
     print("")
     print("=" * 80)
     print("ETHEREUM (ETH)")
@@ -180,7 +182,6 @@ def analyze_btc_eth():
     print("RSI: " + str(round(eth_rsi, 1)))
     print("Trend: " + eth_trend)
     
-    # Markt Sentiment
     print("")
     print("=" * 80)
     print("MARKT SENTIMENT")
@@ -236,14 +237,125 @@ def analyze_btc_eth():
     
     return btc_df, eth_df, market_data
 
+def analyze_altcoins_with_email(market_data, email_body):
+    """Analyseer altcoins en voeg toe aan email"""
+    
+    totaal_waarde = 0
+    koop_signals = []
+    verkoop_signals = []
+    hold_signals = []
+    
+    for coin_id, coin_data in config.PORTFOLIO.items():
+        if coin_data['amount'] <= 0:
+            continue
+        
+        naam = coin_data['name']
+        amount = coin_data['amount']
+        
+        if 'manual_price' in coin_data and coin_data['manual_price'] > 0:
+            prijs = coin_data['manual_price']
+            waarde = prijs * amount
+            totaal_waarde += waarde
+            hold_signals.append({
+                'naam': naam,
+                'price': prijs,
+                'waarde': waarde,
+                'advies': 'Handmatige prijs'
+            })
+            continue
+        
+        df = get_historical_data(coin_id, days=60)
+        if df is None or len(df) < 14:
+            continue
+        
+        prijs = df['price'].iloc[-1]
+        rsi = calculate_rsi(df)
+        change_7d = ((prijs - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
+        vs_btc = change_7d - market_data['btc_change_7d']
+        waarde = prijs * amount
+        totaal_waarde += waarde
+        
+        if rsi < 30 and vs_btc > 0:
+            advies = "KOOP"
+            koop_signals.append({
+                'naam': naam,
+                'price': prijs,
+                'rsi': rsi,
+                'change_7d': change_7d,
+                'waarde': waarde
+            })
+        elif rsi > 70:
+            advies = "VERKOOP"
+            verkoop_signals.append({
+                'naam': naam,
+                'price': prijs,
+                'rsi': rsi,
+                'change_7d': change_7d,
+                'waarde': waarde
+            })
+        elif vs_btc < -10:
+            advies = "ZWAK"
+            hold_signals.append({
+                'naam': naam,
+                'price': prijs,
+                'rsi': rsi,
+                'advies': advies
+            })
+        else:
+            advies = "HOUDEN"
+            hold_signals.append({
+                'naam': naam,
+                'price': prijs,
+                'rsi': rsi,
+                'advies': advies
+            })
+    
+    email_body += "Totale Portfolio Waarde: $" + str(round(totaal_waarde, 2)) + "\n\n"
+    
+    email_body += "-" * 80 + "\n"
+    email_body += "KOOP SIGNALEN:\n"
+    email_body += "-" * 80 + "\n"
+    for coin in koop_signals:
+        email_body += coin['naam'] + " - $" + str(round(coin['price'], 4))
+        email_body += " | RSI: " + str(round(coin['rsi'], 1))
+        email_body += " | 7d: " + str(round(coin['change_7d'], 2)) + "%"
+        email_body += " | Waarde: $" + str(round(coin['waarde'], 2)) + "\n"
+    
+    email_body += "\n"
+    email_body += "-" * 80 + "\n"
+    email_body += "VERKOOP SIGNALEN:\n"
+    email_body += "-" * 80 + "\n"
+    for coin in verkoop_signals:
+        email_body += coin['naam'] + " - $" + str(round(coin['price'], 4))
+        email_body += " | RSI: " + str(round(coin['rsi'], 1))
+        email_body += " | 7d: " + str(round(coin['change_7d'], 2)) + "%"
+        email_body += " | Waarde: $" + str(round(coin['waarde'], 2)) + "\n"
+    
+    email_body += "\n"
+    email_body += "-" * 80 + "\n"
+    email_body += "HOUDEN/ZWAK:\n"
+    email_body += "-" * 80 + "\n"
+    for coin in hold_signals:
+        email_body += coin['naam'] + " - $" + str(round(coin['price'], 4))
+        email_body += " | RSI: " + str(round(coin['rsi'], 1))
+        email_body += " | Advies: " + coin['advies'] + "\n"
+    
+    email_body += "\n"
+    email_body += "=" * 80 + "\n"
+    email_body += "Dit is een automatisch rapport.\n"
+    email_body += "Voor vragen: bekijk je scripts in crypto_trading map.\n"
+    
+    print(email_body)
+
 def analyze_altcoins(market_data):
+    """Analyseer altcoins (console versie)"""
+    
     print("")
     print("=" * 80)
     print("ALTCOIN ANALYSE")
     print("=" * 80)
     print("")
     
-    # Alleen coins met amounts > 0
     for coin_id, coin_data in config.PORTFOLIO.items():
         if coin_data['amount'] <= 0:
             continue
@@ -255,7 +367,6 @@ def analyze_altcoins(market_data):
         print(naam)
         print("-" * 80)
         
-        # Check handmatige prijs
         if 'manual_price' in coin_data and coin_data['manual_price'] > 0:
             price = coin_data['manual_price']
             print("Prijs: $" + str(round(price, 6)) + " (handmatig)")
@@ -264,7 +375,6 @@ def analyze_altcoins(market_data):
             print("")
             continue
         
-        # Haal data op
         df = get_historical_data(coin_id, days=60)
         
         if df is None or len(df) < 14:
@@ -272,7 +382,6 @@ def analyze_altcoins(market_data):
             print("")
             continue
         
-        # Analyse
         price = df['price'].iloc[-1]
         rsi = calculate_rsi(df)
         change_7d = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
@@ -285,7 +394,6 @@ def analyze_altcoins(market_data):
         print("vs BTC: " + ("+" if vs_btc > 0 else "") + str(round(vs_btc, 2)) + "%")
         print("")
         
-        # Advies
         print("Advies:")
         if rsi < 30 and vs_btc > 0:
             print("  🟢 KOOP - Oversold + sterker dan BTC")
@@ -304,11 +412,36 @@ if __name__ == "__main__":
     print("⏳ Dit duurt even...")
     print("")
     
+    email_subject = "Crypto Dagrapport - " + datetime.now().strftime('%d-%m-%Y')
+    email_body = ""
+    
     btc_df, eth_df, market_data = analyze_btc_eth()
     
     if market_data:
-        analyze_altcoins(market_data)
+        email_body += "BITCOIN & ETHEREUM ANALYSE\n"
+        email_body += "=" * 80 + "\n\n"
+        email_body += "BTC: $" + str(round(market_data['btc_price'], 2))
+        email_body += " | 7d: " + str(round(market_data['btc_change_7d'], 2)) + "%"
+        email_body += " | RSI: " + str(round(market_data['btc_rsi'], 1))
+        email_body += " | Trend: " + market_data['btc_trend'] + "\n\n"
+        
+        email_body += "ETH: $" + str(round(market_data['eth_price'], 2))
+        email_body += " | 7d: " + str(round(market_data['eth_change_7d'], 2)) + "%"
+        email_body += " | RSI: " + str(round(market_data['eth_rsi'], 1))
+        email_body += " | Trend: " + market_data['eth_trend'] + "\n\n"
+        
+        email_body += "MARKT SENTIMENT: " + market_data['sentiment'] + "\n"
+        email_body += "ADVIES: " + market_data['advice'] + "\n\n"
+        
+        email_body += "\nALTCOIN ANALYSE\n"
+        email_body += "=" * 80 + "\n\n"
+        
+        analyze_altcoins_with_email(market_data, email_body)
+        
+        send_email_report(email_subject, email_body)
         
         print("=" * 80)
         print("VOLTOOID")
         print("=" * 80)
+    else:
+        print("Fout: Kon analyse niet voltooien!")
