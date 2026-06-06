@@ -72,6 +72,17 @@ def get_trend(df):
         return "BEARISH"
     return "NEUTRAAL"
 
+def get_advies(rsi, vs_btc, trend):
+    if rsi < 30 and vs_btc > 0:
+        return "🟢 KOOP"
+    elif rsi > 70:
+        return "🔴 VERKOOP"
+    elif trend == "BEARISH" and vs_btc < -5:
+        return "⚠️  ZWAK"
+    elif trend == "BULLISH" and vs_btc > 5:
+        return "💪 STERK"
+    return "⚪ HOUDEN"
+
 def send_email(subject, body):
     msg = MIMEMultipart()
     msg['From'] = EMAIL_ADDRESS
@@ -95,7 +106,7 @@ if __name__ == "__main__":
     print("Crypto analyse gestart...")
     
     subject = "Crypto Dagrapport - " + datetime.now().strftime('%d-%m-%Y')
-    body = "CRYPTO DAGRAPPORT\n"
+    body = "📊 CRYPTO DAGRAPPORT\n"
     body += "Datum: " + datetime.now().strftime('%d-%m-%Y') + "\n"
     body += "=" * 80 + "\n\n"
     
@@ -113,7 +124,13 @@ if __name__ == "__main__":
             ch24 = ((price - df['price'].iloc[-2]) / df['price'].iloc[-2]) * 100 if len(df) >= 2 else 0
             ch7 = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
             
-            results[coin_name] = {'price': price, 'rsi': rsi, 'trend': trend, 'ch24': ch24, 'ch7': ch7}
+            results[coin_name] = {
+                'price': price, 
+                'rsi': rsi, 
+                'trend': trend, 
+                'ch24': ch24, 
+                'ch7': ch7
+            }
             
             if coin_id == 'bitcoin':
                 btc_change = ch7
@@ -123,19 +140,19 @@ if __name__ == "__main__":
         btc = results['BTC']
         eth = results['ETH']
         
-        body += "BITCOIN & ETHEREUM\n"
+        body += "📈 BITCOIN & ETHEREUM\n"
         body += "-" * 80 + "\n"
         body += "BTC: $" + str(round(btc['price'], 2))
         body += " | 24u: " + str(round(btc['ch24'], 2)) + "%"
         body += " | 7d: " + str(round(btc['ch7'], 2)) + "%"
         body += " | RSI: " + str(round(btc['rsi'], 1))
-        body += " | Trend: " + btc['trend'] + "\n"
+        body += " | " + btc['trend'] + "\n"
         
         body += "ETH: $" + str(round(eth['price'], 2))
         body += " | 24u: " + str(round(eth['ch24'], 2)) + "%"
         body += " | 7d: " + str(round(eth['ch7'], 2)) + "%"
         body += " | RSI: " + str(round(eth['rsi'], 1))
-        body += " | Trend: " + eth['trend'] + "\n\n"
+        body += " | " + eth['trend'] + "\n\n"
         
         # Sentiment
         score = 0
@@ -149,84 +166,131 @@ if __name__ == "__main__":
         elif eth['rsi'] > 70: score -= 1
         
         if score >= 3:
-            sent = "ZEER BULLISH"
+            sent = "🚀 ZEER BULLISH"
             adv = "Sterke bull market!"
         elif score >= 1:
-            sent = "BULLISH"
+            sent = "📈 BULLISH"
             adv = "Positieve markt."
         elif score <= -3:
-            sent = "ZEER BEARISH"
+            sent = "📉 ZEER BEARISH"
             adv = "Gevaarlijk!"
         elif score <= -1:
-            sent = "BEARISH"
+            sent = "⚠️  BEARISH"
             adv = "Voorzichtig."
         else:
-            sent = "NEUTRAAL"
+            sent = "⚪ NEUTRAAL"
             adv = "Zijwaarts."
         
         body += "MARKT: " + sent + "\n"
         body += "ADVIES: " + adv + "\n\n"
     
-    # Altcoins
+    # ALLE ALTCOINS
     body += "=" * 80 + "\n"
-    body += "ALTCOINS\n"
+    body += "📊 ALLE ALTCOINS (gesorteerd op advies)\n"
     body += "=" * 80 + "\n\n"
     
-    koop = []
-    verkoop = []
-    houd = []
-    
+    # Verzamel alle coins met advies
+    all_coins = []
     for name, data in results.items():
         if name in ['BTC', 'ETH']:
             continue
         
         vs_btc = data['ch7'] - btc_change
+        advies = get_advies(data['rsi'], vs_btc, data['trend'])
         
-        if data['rsi'] < 30 and vs_btc > 0:
-            koop.append((name, data, vs_btc))
-        elif data['rsi'] > 70:
-            verkoop.append((name, data, vs_btc))
-        else:
-            houd.append((name, data, vs_btc))
+        all_coins.append({
+            'name': name,
+            'price': data['price'],
+            'rsi': data['rsi'],
+            'ch7': data['ch7'],
+            'vs_btc': vs_btc,
+            'trend': data['trend'],
+            'advies': advies
+        })
     
-    body += "KOOP:\n"
+    # Sorteer op advies
+    koop_coins = [c for c in all_coins if "KOOP" in c['advies']]
+    verkoop_coins = [c for c in all_coins if "VERKOOP" in c['advies']]
+    sterk_coins = [c for c in all_coins if "STERK" in c['advies']]
+    zwak_coins = [c for c in all_coins if "ZWAK" in c['advies']]
+    houd_coins = [c for c in all_coins if "HOUDEN" in c['advies']]
+    
+    # KOOP
+    body += "🟢 KOOP SIGNALEN (RSI < 30 + sterker dan BTC):\n"
     body += "-" * 80 + "\n"
-    if koop:
-        for n, d, v in koop:
-            body += n + ": $" + str(round(d['price'], 4))
-            body += " | RSI: " + str(round(d['rsi'], 1))
-            body += " | 7d: " + str(round(d['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if v > 0 else "") + str(round(v, 2)) + "%"
-            body += " | " + d['trend'] + "\n"
+    if koop_coins:
+        for c in koop_coins:
+            body += c['name'] + ": $" + str(round(c['price'], 4))
+            body += " | RSI: " + str(round(c['rsi'], 1))
+            body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
+            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
+            body += " | " + c['trend'] + "\n"
     else:
-        body += "Geen koop signalen.\n"
+        body += "Geen koop signalen vandaag.\n"
     
-    body += "\nVERKOOP:\n"
+    body += "\n"
+    
+    # VERKOOP
+    body += "🔴 VERKOOP SIGNALEN (RSI > 70):\n"
     body += "-" * 80 + "\n"
-    if verkoop:
-        for n, d, v in verkoop:
-            body += n + ": $" + str(round(d['price'], 4))
-            body += " | RSI: " + str(round(d['rsi'], 1))
-            body += " | 7d: " + str(round(d['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if v > 0 else "") + str(round(v, 2)) + "%"
-            body += " | " + d['trend'] + "\n"
+    if verkoop_coins:
+        for c in verkoop_coins:
+            body += c['name'] + ": $" + str(round(c['price'], 4))
+            body += " | RSI: " + str(round(c['rsi'], 1))
+            body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
+            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
+            body += " | " + c['trend'] + "\n"
     else:
         body += "Geen verkoop signalen.\n"
     
-    body += "\nHOUDEN:\n"
+    body += "\n"
+    
+    # STERK
+    body += "💪 STERK (bullish + outperforming BTC):\n"
     body += "-" * 80 + "\n"
-    if houd:
-        for n, d, v in houd:
-            body += n + ": $" + str(round(d['price'], 4))
-            body += " | RSI: " + str(round(d['rsi'], 1))
-            body += " | 7d: " + str(round(d['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if v > 0 else "") + str(round(v, 2)) + "%"
-            body += " | " + d['trend'] + "\n"
+    if sterk_coins:
+        for c in sterk_coins:
+            body += c['name'] + ": $" + str(round(c['price'], 4))
+            body += " | RSI: " + str(round(c['rsi'], 1))
+            body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
+            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
+            body += " | " + c['trend'] + "\n"
+    else:
+        body += "Geen.\n"
+    
+    body += "\n"
+    
+    # ZWAK
+    body += "⚠️  ZWAK (bearish + underperforming BTC):\n"
+    body += "-" * 80 + "\n"
+    if zwak_coins:
+        for c in zwak_coins:
+            body += c['name'] + ": $" + str(round(c['price'], 4))
+            body += " | RSI: " + str(round(c['rsi'], 1))
+            body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
+            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
+            body += " | " + c['trend'] + "\n"
+    else:
+        body += "Geen.\n"
+    
+    body += "\n"
+    
+    # HOUDEN
+    body += "⚪ HOUDEN (neutraal):\n"
+    body += "-" * 80 + "\n"
+    if houd_coins:
+        for c in houd_coins:
+            body += c['name'] + ": $" + str(round(c['price'], 4))
+            body += " | RSI: " + str(round(c['rsi'], 1))
+            body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
+            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
+            body += " | " + c['trend'] + "\n"
     else:
         body += "Geen.\n"
     
     body += "\n" + "=" * 80 + "\n"
     body += "Automatisch rapport van je Crypto Trading Bot.\n"
+    body += "Volgende rapport morgen om 08:00.\n"
     
     send_email(subject, body)
-    print("KLAAR!")
+    print("KLAAR! Email verstuurd.")
