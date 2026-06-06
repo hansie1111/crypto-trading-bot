@@ -13,7 +13,6 @@ RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL', 'hansiepansie007@gmail.com')
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Jouw portfolio
 MY_COINS = {
     'bitcoin': 'BTC',
     'ethereum': 'ETH',
@@ -30,7 +29,6 @@ MY_COINS = {
     'ethereum-name-service': 'ENS'
 }
 
-# Jouw watchlist
 WATCHLIST = {
     'cosmos': 'ATOM',
     'chainlink': 'LINK',
@@ -92,8 +90,10 @@ def detect_breakout(df, coin_name):
     
     price = df['price'].iloc[-1]
     high_14d = df['price'].rolling(window=14).max().iloc[-1]
+    low_14d = df['price'].rolling(window=14).min().iloc[-1]
     ch_3d = ((price - df['price'].iloc[-3]) / df['price'].iloc[-3]) * 100 if len(df) >= 3 else 0
     ch_7d = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
+    ch_14d = ((price - df['price'].iloc[-14]) / df['price'].iloc[-14]) * 100 if len(df) >= 14 else 0
     rsi = calc_rsi(df)
     trend = get_trend(df)
     
@@ -112,6 +112,9 @@ def detect_breakout(df, coin_name):
         score += 2
     if trend == "BULLISH":
         score += 2
+    if ch_3d > ch_7d:
+        score += 1
+        signals.append("Versnellend")
     
     return {
         'name': coin_name,
@@ -120,9 +123,12 @@ def detect_breakout(df, coin_name):
         'trend': trend,
         'ch_3d': ch_3d,
         'ch_7d': ch_7d,
+        'ch_14d': ch_14d,
         'distance': distance,
         'score': score,
-        'signals': signals
+        'signals': signals,
+        'high_14d': high_14d,
+        'low_14d': low_14d
     }
 
 def send_email(subject, body):
@@ -203,10 +209,10 @@ if __name__ == "__main__":
         sent = "🚀 ZEER BULLISH" if score >= 3 else "📈 BULLISH" if score >= 1 else "📉 BEARISH" if score <= -1 else "⚪ NEUTRAAL"
         body += "MARKT: " + sent + "\n\n"
     
-    # BREAKOUT SCANNER
+    # BREAKOUT SCANNER - TOONT ALLES
     print("Scan breakouts...")
     body += "=" * 80 + "\n"
-    body += "🎯 BREAKOUT WATCHLIST\n"
+    body += "🎯 BREAKOUT WATCHLIST (10 coins)\n"
     body += "=" * 80 + "\n\n"
     
     breakouts = []
@@ -219,52 +225,58 @@ if __name__ == "__main__":
     
     breakouts.sort(key=lambda x: x['score'], reverse=True)
     
-    # 🟢 POTENTIËLE BREAKOUTS (Score >= 6)
-    body += "🟢 POTENTILE BREAKOUTS:\n"
+    # 🟢 POTENTIËLE BREAKOUTS
+    body += "🟢 POTENTILE BREAKOUTS (Score 6+):\n"
     body += "-" * 80 + "\n"
     
     high_score = [b for b in breakouts if b['score'] >= 6]
     
     if high_score:
         for coin in high_score:
-            body += "\n" + coin['name'].upper() + " - Score: " + str(coin['score']) + "/10 🔥\n"
+            body += "\n🔥 " + coin['name'].upper() + " - Score: " + str(coin['score']) + "/10\n"
             body += "💰 Prijs: $" + str(round(coin['price'], 4))
             body += " | 3d: " + str(round(coin['ch_3d'], 2)) + "%"
-            body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%\n"
+            body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
+            body += " | 14d: " + str(round(coin['ch_14d'], 2)) + "%\n"
             body += "📊 RSI: " + str(round(coin['rsi'], 1))
             body += " | " + coin['trend']
             body += " | Distance: " + str(round(coin['distance'], 2)) + "%\n"
+            body += "📈 14d Range: $" + str(round(coin['low_14d'], 4)) + " - $" + str(round(coin['high_14d'], 4)) + "\n"
             if coin['signals']:
                 body += "✅ Signalen: " + ", ".join(coin['signals']) + "\n"
     else:
-        body += "Geen sterke breakouts vandaag.\n"
+        body += "Geen sterke breakouts vandaag (markt is bearish).\n"
+        body += "💡 Tip: Houd coins met RSI < 30 in de gaten voor mogelijke bounce.\n"
     
     body += "\n"
     
-    # 👁️ WATCHLIST (Score 4-5)
-    body += "👁️  WATCHLIST (Score 4-5):\n"
+    # 👁️ WATCHLIST - TOONT ALLE OVERIGE COINS
+    body += "👁️  ALLE WATCHLIST COINS:\n"
     body += "-" * 80 + "\n"
     
-    medium_score = [b for b in breakouts if 4 <= b['score'] < 6]
-    
-    if medium_score:
-        for coin in medium_score:
-            body += coin['name'].upper() + ": $" + str(round(coin['price'], 4))
+    for coin in breakouts:
+        if coin['score'] < 6:
+            status = "⚪" if coin['score'] >= 4 else "🔻"
+            body += status + " " + coin['name'].upper() + ": $" + str(round(coin['price'], 4))
             body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
-            body += " | Score: " + str(coin['score']) + "\n"
-    else:
-        body += "Geen.\n"
+            body += " | RSI: " + str(round(coin['rsi'], 1))
+            body += " | Score: " + str(coin['score'])
+            body += " | " + coin['trend'] + "\n"
     
     body += "\n"
     
-    # PORTFOLIO DETAILS
+    # PORTFOLIO - TOONT ALLE COINS
     body += "=" * 80 + "\n"
-    body += "📊 JOUW PORTFOLIO\n"
+    body += "📊 JOUW PORTFOLIO (" + str(len(results)) + " coins)\n"
     body += "=" * 80 + "\n\n"
     
-    for name, data in results.items():
+    # Sorteer op performance
+    sorted_portfolio = sorted(results.items(), key=lambda x: x[1]['ch7'], reverse=True)
+    
+    for name, data in sorted_portfolio:
         if name in ['BTC', 'ETH']:
             continue
+        
         vs_btc = data['ch7'] - btc_change
         
         if data['rsi'] < 30 and vs_btc > 0:
@@ -273,16 +285,20 @@ if __name__ == "__main__":
             adv = "🔴 VERKOOP"
         elif data['trend'] == "BEARISH" and vs_btc < -5:
             adv = "⚠️  ZWAK"
+        elif data['trend'] == "BULLISH" and vs_btc > 5:
+            adv = "💪 STERK"
         else:
             adv = "⚪ HOUDEN"
         
         body += name + ": $" + str(round(data['price'], 4))
+        body += " | 24u: " + str(round(data['ch24'], 2)) + "%"
         body += " | 7d: " + str(round(data['ch7'], 2)) + "%"
         body += " | RSI: " + str(round(data['rsi'], 1))
         body += " | " + adv + "\n"
     
     body += "\n" + "=" * 80 + "\n"
-    body += "Automatisch rapport.\n"
+    body += "Automatisch rapport van je Crypto Trading Bot.\n"
+    body += "Volgende update: vanavond 17:20.\n"
     
     send_email(subject, body)
     print("KLAAR! Email verstuurd.")
