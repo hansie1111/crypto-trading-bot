@@ -4,7 +4,6 @@ import time
 import smtplib
 from datetime import datetime
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
 
 EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', 'hansiepansie007@gmail.com')
@@ -13,48 +12,52 @@ RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL', 'hansiepansie007@gmail.com')
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
+# Jouw 6 coins
 MY_COINS = {
     'bitcoin': 'BTC',
     'ethereum': 'ETH',
     'render-token': 'RENDER',
     'avalanche-2': 'AVAX',
     'wormhole': 'W',
-    'peaq': 'PEAQ',
-    'renzo': 'REZ',
-    'injective-protocol': 'INJ',
-    'centrifuge': 'CFG',
-    'fetch-ai': 'FET',
-    'dash': 'DASH',
-    'filecoin': 'FIL',
-    'ethereum-name-service': 'ENS'
+    'peaq': 'PEAQ'
 }
 
-WATCHLIST = {
-    'cosmos': 'ATOM',
-    'chainlink': 'LINK',
-    'near': 'NEAR',
-    'litecoin': 'LTC',
-    'arbitrum': 'ARB',
-    'optimism': 'OP',    
-}
-
-def get_data(coin_id, days=30):
+def get_data(coin_id, days=30, max_retries=3):
+    """Haal data op met retries"""
     url = "https://api.coingecko.com/api/v3/coins/" + coin_id + "/market_chart"
     params = {'vs_currency': 'usd', 'days': days, 'interval': 'daily'}
     
-    try:
-        time.sleep(2.5)  # Iets langzamer voor betere success rate
-        r = requests.get(url, params=params, timeout=15)
-        
-        if r.status_code == 200:
-            data = r.json()
-            if 'prices' in data and len(data['prices']) >= 7:
-                df = pd.DataFrame(data['prices'], columns=['time', 'price'])
-                df['time'] = pd.to_datetime(df['time'], unit='ms')
-                df.set_index('time', inplace=True)
-                return df
-    except Exception as e:
-        print("    Fout bij " + coin_id + ": " + str(e))
+    for attempt in range(max_retries):
+        try:
+            print("    Poging " + str(attempt + 1) + "/" + str(max_retries) + "...")
+            time.sleep(5)  # 5 seconden wachten tussen calls
+            
+            r = requests.get(url, params=params, timeout=20)  # 20 seconden timeout
+            
+            if r.status_code == 429:
+                print("    Rate limit! Wacht 30 seconden...")
+                time.sleep(30)
+                continue
+            
+            if r.status_code == 200:
+                data = r.json()
+                if 'prices' in data and len(data['prices']) >= 7:
+                    df = pd.DataFrame(data['prices'], columns=['time', 'price'])
+                    df['time'] = pd.to_datetime(df['time'], unit='ms')
+                    df.set_index('time', inplace=True)
+                    print("    ✓ Succes!")
+                    return df
+                else:
+                    print("    ✗ Onvoldoende data")
+            else:
+                print("    ✗ HTTP error: " + str(r.status_code))
+                
+        except requests.exceptions.Timeout:
+            print("    ✗ Time-out!")
+            time.sleep(10)
+        except Exception as e:
+            print("    ✗ Fout: " + str(e))
+            time.sleep(10)
     
     return None
 
@@ -100,22 +103,21 @@ def send_email(subject, body):
 
 if __name__ == "__main__":
     print("Crypto analyse gestart...")
+    print("Aantal coins: " + str(len(MY_COINS)))
     
-    subject = "🎯 Crypto Rapport - " + datetime.now().strftime('%d-%m-%Y')
+    subject = "📊 Crypto Rapport - " + datetime.now().strftime('%d-%m-%Y')
     body = "📊 CRYPTO DAGRAPPORT\n"
     body += "Datum: " + datetime.now().strftime('%d-%m-%Y') + "\n"
     body += "=" * 80 + "\n\n"
     
-    portfolio_data = {}
-    watchlist_data = {}
-    failed_coins = []
+    results = {}
+    failed = []
     btc_change = 0
     
-    # === PORTFOLIO ===
-    print("\n📊 Jouw Portfolio:")
+    print("\nAnalyseer coins...")
     for coin_id, coin_name in MY_COINS.items():
-        print("  " + coin_name + "...")
-        df = get_data(coin_id, 60)
+        print("\n  " + coin_name + "...")
+        df = get_data(coin_id, days=30, max_retries=2)
         
         if df is not None:
             price = df['price'].iloc[-1]
@@ -124,54 +126,23 @@ if __name__ == "__main__":
             ch24 = ((price - df['price'].iloc[-2]) / df['price'].iloc[-2]) * 100 if len(df) >= 2 else 0
             ch7 = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
             
-            portfolio_data[coin_name] = {
-                'price': price, 'rsi': rsi, 'trend': trend, 
+            results[coin_name] = {
+                'price': price, 'rsi': rsi, 'trend': trend,
                 'ch24': ch24, 'ch7': ch7
             }
             
             if coin_id == 'bitcoin':
                 btc_change = ch7
             
-            print("    ✓ $" + str(round(price, 4)))
+            print("    $" + str(round(price, 4)))
         else:
-            failed_coins.append(coin_name)
+            failed.append(coin_name)
             print("    ✗ GEEN DATA")
     
-    # === WATCHLIST ===
-    print("\n🎯 Watchlist:")
-    for coin_id, coin_name in WATCHLIST.items():
-        print("  " + coin_name + "...")
-        df = get_data(coin_id, 30)
-        
-        if df is not None:
-            price = df['price'].iloc[-1]
-            rsi = calc_rsi(df)
-            trend = get_trend(df)
-            ch7 = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
-            high_14d = df['price'].rolling(window=14).max().iloc[-1] if len(df) >= 14 else price
-            distance = ((high_14d - price) / high_14d) * 100
-            
-            # Bereken breakout score
-            score = 0
-            if 0 <= distance < 5: score += 3
-            if ch7 > 0: score += 2
-            if 45 <= rsi <= 65: score += 2
-            if trend == "BULLISH": score += 2
-            
-            watchlist_data[coin_name] = {
-                'price': price, 'rsi': rsi, 'trend': trend,
-                'ch7': ch7, 'distance': distance, 'score': score
-            }
-            
-            print("    ✓ $" + str(round(price, 4)) + " | Score: " + str(score))
-        else:
-            failed_coins.append(coin_name)
-            print("    ✗ GEEN DATA")
-    
-    # === BTC & ETH ===
-    if 'BTC' in portfolio_data and 'ETH' in portfolio_data:
-        btc = portfolio_data['BTC']
-        eth = portfolio_data['ETH']
+    # BTC & ETH
+    if 'BTC' in results and 'ETH' in results:
+        btc = results['BTC']
+        eth = results['ETH']
         
         body += "📈 BITCOIN & ETHEREUM\n"
         body += "-" * 80 + "\n"
@@ -187,7 +158,6 @@ if __name__ == "__main__":
         body += " | RSI: " + str(round(eth['rsi'], 1))
         body += " | " + eth['trend'] + "\n\n"
         
-        # Sentiment
         score = 0
         if btc['trend'] == "BULLISH": score += 1
         elif btc['trend'] == "BEARISH": score -= 1
@@ -201,59 +171,13 @@ if __name__ == "__main__":
         sent = "🚀 ZEER BULLISH" if score >= 3 else "📈 BULLISH" if score >= 1 else "📉 BEARISH" if score <= -1 else "⚪ NEUTRAAL"
         body += "MARKT: " + sent + "\n\n"
     
-    # === BREAKOUT WATCHLIST ===
+    # PORTFOLIO
     body += "=" * 80 + "\n"
-    body += "🎯 BREAKOUT WATCHLIST\n"
+    body += "📊 JOUW PORTFOLIO (" + str(len(results)) + " coins)\n"
     body += "=" * 80 + "\n\n"
     
-    # Sorteer op score
-    sorted_watchlist = sorted(watchlist_data.items(), key=lambda x: x[1]['score'], reverse=True)
-    
-    # 🟢 POTENTIËLE BREAKOUTS
-    body += "🟢 POTENTIËLE BREAKOUTS (Score 6+):\n"
-    body += "-" * 80 + "\n"
-    
-    high_score = [(n, d) for n, d in sorted_watchlist if d['score'] >= 6]
-    
-    if high_score:
-        for name, data in high_score:
-            body += "\n🔥 " + name + " - Score: " + str(data['score']) + "/10\n"
-            body += "💰 $" + str(round(data['price'], 4))
-            body += " | 7d: " + str(round(data['ch7'], 2)) + "%"
-            body += " | RSI: " + str(round(data['rsi'], 1)) + "\n"
-            body += "📊 " + data['trend']
-            body += " | Distance: " + str(round(data['distance'], 2)) + "%\n"
-    else:
-        body += "Geen sterke breakouts vandaag.\n"
-        body += "💡 Markt is bearish - wacht op betere signalen.\n"
-    
-    body += "\n"
-    
-    # 👁️ ALLE WATCHLIST COINS
-    body += "👁️  ALLE WATCHLIST COINS:\n"
-    body += "-" * 80 + "\n"
-    
-    if sorted_watchlist:
-        for name, data in sorted_watchlist:
-            icon = "🟢" if data['score'] >= 6 else "⚪"
-            body += icon + " " + name + ": $" + str(round(data['price'], 4))
-            body += " | 7d: " + str(round(data['ch7'], 2)) + "%"
-            body += " | RSI: " + str(round(data['rsi'], 1))
-            body += " | Score: " + str(data['score'])
-            body += " | " + data['trend'] + "\n"
-    else:
-        body += "Geen data beschikbaar.\n"
-    
-    body += "\n"
-    
-    # === PORTFOLIO ===
-    body += "=" * 80 + "\n"
-    body += "📊 JOUW PORTFOLIO (" + str(len(portfolio_data)) + " van " + str(len(MY_COINS)) + " coins)\n"
-    body += "=" * 80 + "\n\n"
-    
-    if portfolio_data:
-        # Sorteer op performance
-        sorted_portfolio = sorted(portfolio_data.items(), key=lambda x: x[1]['ch7'], reverse=True)
+    if results:
+        sorted_portfolio = sorted(results.items(), key=lambda x: x[1]['ch7'], reverse=True)
         
         for name, data in sorted_portfolio:
             if name in ['BTC', 'ETH']:
@@ -277,14 +201,12 @@ if __name__ == "__main__":
             body += " | 7d: " + str(round(data['ch7'], 2)) + "%"
             body += " | RSI: " + str(round(data['rsi'], 1))
             body += " | " + adv + "\n"
-    else:
-        body += "Geen portfolio data beschikbaar.\n"
     
     # Gefaalde coins
-    if failed_coins:
-        body += "\n⚠️  NIET BESCHIKBAAR (" + str(len(failed_coins)) + "):\n"
+    if failed:
+        body += "\n⚠️  NIET BESCHIKBAAR (" + str(len(failed)) + "):\n"
         body += "-" * 80 + "\n"
-        body += ", ".join(failed_coins) + "\n"
+        body += ", ".join(failed) + "\n"
     
     body += "\n" + "=" * 80 + "\n"
     body += "Automatisch rapport.\n"
@@ -292,6 +214,6 @@ if __name__ == "__main__":
     
     send_email(subject, body)
     print("\n✅ KLAAR! Email verstuurd.")
-    print("Succes: " + str(len(portfolio_data) + len(watchlist_data)) + " coins")
-    if failed_coins:
-        print("Gefaald: " + str(len(failed_coins)) + " coins")
+    print("Succes: " + str(len(results)) + "/" + str(len(MY_COINS)) + " coins")
+    if failed:
+        print("Gefaald: " + ", ".join(failed))
