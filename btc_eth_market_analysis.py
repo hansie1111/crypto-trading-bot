@@ -7,14 +7,12 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 
-# EMAIL INSTELLINGEN
 EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS', 'hansiepansie007@gmail.com')
 EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', 'dmdlcwbhagykoucs')
 RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL', 'hansiepansie007@gmail.com')
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# COINS OM TE ANALYSEREN
 COINS = {
     'bitcoin': 'BTC',
     'ethereum': 'ETH',
@@ -35,10 +33,16 @@ def get_data(coin_id, days=60):
     url = "https://api.coingecko.com/api/v3/coins/" + coin_id + "/market_chart"
     params = {'vs_currency': 'usd', 'days': days, 'interval': 'daily'}
     
-    for i in range(2):
+    for i in range(3):  # 3 pogingen
         try:
-            time.sleep(1)
-            r = requests.get(url, params=params, timeout=10)
+            time.sleep(2)  # Langere wachtijd
+            r = requests.get(url, params=params, timeout=15)
+            
+            if r.status_code == 429:
+                print("Rate limit! Wacht 15 seconden...")
+                time.sleep(15)
+                continue
+            
             if r.status_code == 200:
                 data = r.json()
                 if 'prices' in data and len(data['prices']) >= 14:
@@ -46,8 +50,10 @@ def get_data(coin_id, days=60):
                     df['time'] = pd.to_datetime(df['time'], unit='ms')
                     df.set_index('time', inplace=True)
                     return df
-        except:
-            time.sleep(2)
+        except Exception as e:
+            print("Fout bij " + coin_id + ": " + str(e))
+            time.sleep(3)
+    
     return None
 
 def calc_rsi(df, period=14):
@@ -104,6 +110,7 @@ def send_email(subject, body):
 
 if __name__ == "__main__":
     print("Crypto analyse gestart...")
+    print("Totaal aantal coins: " + str(len(COINS)))
     
     subject = "Crypto Dagrapport - " + datetime.now().strftime('%d-%m-%Y')
     body = "📊 CRYPTO DAGRAPPORT\n"
@@ -111,10 +118,11 @@ if __name__ == "__main__":
     body += "=" * 80 + "\n\n"
     
     results = {}
+    failed_coins = []
     btc_change = 0
     
     for coin_id, coin_name in COINS.items():
-        print("Analyseren: " + coin_name)
+        print("Analyseren: " + coin_name + "...")
         df = get_data(coin_id, 90)
         
         if df is not None:
@@ -134,6 +142,19 @@ if __name__ == "__main__":
             
             if coin_id == 'bitcoin':
                 btc_change = ch7
+            
+            print("  ✓ " + coin_name + ": $" + str(round(price, 4)))
+        else:
+            failed_coins.append(coin_name)
+            print("  ✗ " + coin_name + ": GEEN DATA")
+    
+    # Toon gefaalde coins
+    if failed_coins:
+        body += "⚠️  NIET BESCHIKBAAR:\n"
+        body += "-" * 80 + "\n"
+        for coin in failed_coins:
+            body += coin + "\n"
+        body += "\n"
     
     # BTC & ETH
     if 'BTC' in results and 'ETH' in results:
@@ -154,7 +175,6 @@ if __name__ == "__main__":
         body += " | RSI: " + str(round(eth['rsi'], 1))
         body += " | " + eth['trend'] + "\n\n"
         
-        # Sentiment
         score = 0
         if btc['trend'] == "BULLISH": score += 1
         elif btc['trend'] == "BEARISH": score -= 1
@@ -186,10 +206,9 @@ if __name__ == "__main__":
     
     # ALLE ALTCOINS
     body += "=" * 80 + "\n"
-    body += "📊 ALLE ALTCOINS (gesorteerd op advies)\n"
+    body += "📊 ALLE ALTCOINS (" + str(len(results) - 2) + " coins)\n"
     body += "=" * 80 + "\n\n"
     
-    # Verzamel alle coins met advies
     all_coins = []
     for name, data in results.items():
         if name in ['BTC', 'ETH']:
@@ -208,89 +227,71 @@ if __name__ == "__main__":
             'advies': advies
         })
     
-    # Sorteer op advies
     koop_coins = [c for c in all_coins if "KOOP" in c['advies']]
     verkoop_coins = [c for c in all_coins if "VERKOOP" in c['advies']]
     sterk_coins = [c for c in all_coins if "STERK" in c['advies']]
     zwak_coins = [c for c in all_coins if "ZWAK" in c['advies']]
     houd_coins = [c for c in all_coins if "HOUDEN" in c['advies']]
     
-    # KOOP
-    body += "🟢 KOOP SIGNALEN (RSI < 30 + sterker dan BTC):\n"
+    body += "🟢 KOOP: " + str(len(koop_coins)) + " coins\n"
     body += "-" * 80 + "\n"
     if koop_coins:
         for c in koop_coins:
             body += c['name'] + ": $" + str(round(c['price'], 4))
             body += " | RSI: " + str(round(c['rsi'], 1))
             body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
             body += " | " + c['trend'] + "\n"
     else:
-        body += "Geen koop signalen vandaag.\n"
+        body += "Geen koop signalen.\n"
     
-    body += "\n"
-    
-    # VERKOOP
-    body += "🔴 VERKOOP SIGNALEN (RSI > 70):\n"
+    body += "\n🔴 VERKOOP: " + str(len(verkoop_coins)) + " coins\n"
     body += "-" * 80 + "\n"
     if verkoop_coins:
         for c in verkoop_coins:
             body += c['name'] + ": $" + str(round(c['price'], 4))
             body += " | RSI: " + str(round(c['rsi'], 1))
             body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
             body += " | " + c['trend'] + "\n"
     else:
         body += "Geen verkoop signalen.\n"
     
-    body += "\n"
-    
-    # STERK
-    body += "💪 STERK (bullish + outperforming BTC):\n"
+    body += "\n💪 STERK: " + str(len(sterk_coins)) + " coins\n"
     body += "-" * 80 + "\n"
     if sterk_coins:
         for c in sterk_coins:
             body += c['name'] + ": $" + str(round(c['price'], 4))
             body += " | RSI: " + str(round(c['rsi'], 1))
             body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
             body += " | " + c['trend'] + "\n"
     else:
         body += "Geen.\n"
     
-    body += "\n"
-    
-    # ZWAK
-    body += "⚠️  ZWAK (bearish + underperforming BTC):\n"
+    body += "\n⚠️  ZWAK: " + str(len(zwak_coins)) + " coins\n"
     body += "-" * 80 + "\n"
     if zwak_coins:
         for c in zwak_coins:
             body += c['name'] + ": $" + str(round(c['price'], 4))
             body += " | RSI: " + str(round(c['rsi'], 1))
             body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
             body += " | " + c['trend'] + "\n"
     else:
         body += "Geen.\n"
     
-    body += "\n"
-    
-    # HOUDEN
-    body += "⚪ HOUDEN (neutraal):\n"
+    body += "\n⚪ HOUDEN: " + str(len(houd_coins)) + " coins\n"
     body += "-" * 80 + "\n"
     if houd_coins:
         for c in houd_coins:
             body += c['name'] + ": $" + str(round(c['price'], 4))
             body += " | RSI: " + str(round(c['rsi'], 1))
             body += " | 7d: " + str(round(c['ch7'], 2)) + "%"
-            body += " | vs BTC: " + ("+" if c['vs_btc'] > 0 else "") + str(round(c['vs_btc'], 2)) + "%"
             body += " | " + c['trend'] + "\n"
     else:
         body += "Geen.\n"
     
     body += "\n" + "=" * 80 + "\n"
+    body += "Totaal geanalyseerd: " + str(len(results)) + " van " + str(len(COINS)) + " coins\n"
     body += "Automatisch rapport van je Crypto Trading Bot.\n"
-    body += "Volgende rapport morgen om 08:00.\n"
     
     send_email(subject, body)
-    print("KLAAR! Email verstuurd.")
+    print("\nKLAAR! Email verstuurd.")
+    print("Succes: " + str(len(results)) + "/" + str(len(COINS)) + " coins")
