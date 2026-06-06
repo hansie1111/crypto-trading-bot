@@ -34,8 +34,8 @@ def get_data(coin_id, days=30):
     
     for attempt in range(2):
         try:
-            time.sleep(8)  # 8 seconden tussen elke request
-            print("    Wacht 8 seconden...")
+            time.sleep(6)  # 6 seconden tussen elke request
+            print("    Wacht 6 seconden...")
             
             r = requests.get(url, params=params, timeout=20)
             
