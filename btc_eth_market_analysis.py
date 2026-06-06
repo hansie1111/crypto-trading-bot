@@ -32,27 +32,17 @@ MY_COINS = {
 }
 
 # Top coins om te scannen op breakouts (extra coins)
-WATCHLIST_COINS = {
-    'solana': 'SOL',
-    'cardano': 'ADA',
-    'polkadot': 'DOT',
+WATCHLIST = {
+    'cosmos': 'ATOM',
     'chainlink': 'LINK',
     'polygon': 'MATIC',
-    'uniswap': 'UNI',
-    'litecoin': 'LTC',
-    'near': 'NEAR',
     'aptos': 'APT',
+    'sui': 'SUI',
+    'near': 'NEAR',
+    'litecoin': 'LTC',
     'arbitrum': 'ARB',
     'optimism': 'OP',
-    'sui': 'SUI',
-    'celestia': 'TIA',
-    'stacks': 'STX',
-    'immutable-x': 'IMX',
-    'the-graph': 'GRT',
-    'fantom': 'FTM',
-    'algorand': 'ALGO',
-    'cosmos': 'ATOM',
-    'hedera-hashgraph': 'HBAR'
+    'algorand': 'ALGO'
 }
 
 def get_data(coin_id, days=30):
