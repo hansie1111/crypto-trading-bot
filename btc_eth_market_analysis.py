@@ -19,7 +19,7 @@ COINS = {
     'render-token': 'RENDER',
     'avalanche-2': 'AVAX',
     'wormhole': 'W',
-    'peaq': 'PEAQ',
+    'near': 'NEAR',
     'renzo': 'REZ',
     'injective-protocol': 'INJ',
     'centrifuge': 'CFG',
