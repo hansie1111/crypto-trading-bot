@@ -67,15 +67,29 @@ def calc_rsi(df, period=14):
     return rsi.iloc[-1] if not rsi.empty else 50
 
 def get_trend(df):
-    if len(df) < 50:
+    if len(df) < 20:  # Minder data nodig (was 50)
         return "NEUTRAAL"
+    
     price = df['price'].iloc[-1]
     ema20 = df['price'].ewm(span=20, adjust=False).mean().iloc[-1]
-    ema50 = df['price'].ewm(span=50, adjust=False).mean().iloc[-1]
+    ema50 = df['price'].ewm(span=50, adjust=False).mean().iloc[-1] if len(df) >= 50 else ema20
+    
+    # Bereken recente momentum
+    ch_24h = ((price - df['price'].iloc[-2]) / df['price'].iloc[-2]) * 100 if len(df) >= 2 else 0
+    ch_3d = ((price - df['price'].iloc[-3]) / df['price'].iloc[-3]) * 100 if len(df) >= 3 else 0
+    
+    # Sterke 24u stijging = BULLISH (belangrijk!)
+    if ch_24h > 10:
+        return "BULLISH"  # +10% of meer = sterk bullish
+    elif ch_24h > 5 and ch_3d > 0:
+        return "BULLISH"  # +5% vandaag EN positief 3d
+    
+    # Traditionele EMA logica
     if price > ema20 > ema50:
         return "BULLISH"
     elif price < ema20 < ema50:
         return "BEARISH"
+    
     return "NEUTRAAL"
 
 def get_advies(rsi, vs_btc, trend):
