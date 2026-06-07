@@ -24,7 +24,12 @@ COINS_TO_SCAN = {
     'celestia': 'TIA',
     'algorand': 'ALGO',
     'cosmos': 'ATOM',
-    'stellar': 'XLM'
+    'stellar': 'XLM',
+    'polygon': 'MATIC',
+    'aptos': 'APT',
+    'the-graph': 'GRT',
+    'fantom': 'FTM',
+    'hedera-hashgraph': 'HBAR',
 }
 
 def get_data(coin_id, days=30):
