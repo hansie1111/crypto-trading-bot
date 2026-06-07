@@ -18,7 +18,6 @@ COINS_TO_SCAN = {
     'polkadot': 'DOT',
     'chainlink': 'LINK',
     'litecoin': 'LTC',
-    'near': 'NEAR',
     'arbitrum': 'ARB',
     'optimism': 'OP',
     'sui': 'SUI',
