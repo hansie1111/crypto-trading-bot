@@ -255,71 +255,99 @@ if __name__ == "__main__":
             print("    ✗ Geen data")
     
     # Sorteer op score
-    all_results.sort(key=lambda x: x['score'], reverse=True)
-    
-    # 🟢 TOP BREAKOUTS (Score 8+)
-    body += " TOP BREAKOUT KANDIDATEN (Score 8+):\n"
-    body += "-" * 80 + "\n\n"
-    
-    top_breakouts = [r for r in all_results if r['score'] >= 8]
-    
-    if top_breakouts:
-        for i, coin in enumerate(top_breakouts[:10], 1):
-            body += str(i) + ". 🔥 " + coin['name'].upper() + " - Score: " + str(coin['score']) + "/15\n"
-            body += "   💰 Prijs: $" + str(round(coin['price'], 4)) + "\n"
-            body += "   📊 3d: " + str(round(coin['ch_3d'], 2)) + "%"
-            body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
-            body += " | 14d: " + str(round(coin['ch_14d'], 2)) + "%\n"
-            body += "   📈 RSI: " + str(round(coin['rsi'], 1))
-            body += " | " + coin['trend']
-            body += " | Distance: " + str(round(coin['distance_to_res'], 2)) + "%\n"
-            body += "   📉 14d Range: $" + str(round(coin['low_14d'], 4)) + " - $" + str(round(coin['high_14d'], 4)) + "\n"
-            
-            if coin['signals']:
-                body += "   ✅ Signalen: " + ", ".join(coin['signals']) + "\n"
-            
-            body += "\n"
-    else:
-        body += "Geen sterke breakouts gevonden.\n"
-        body += "💡 De markt is rustig - wacht op betere kansen.\n\n"
-    
-    # 👁️ WATCHLIST (Score 5-7)
-    body += "\n👁️  WATCHLIST (Score 5-7):\n"
-    body += "-" * 80 + "\n\n"
-    
-    watchlist = [r for r in all_results if 5 <= r['score'] < 8]
-    
-    if watchlist:
-        for coin in watchlist:
-            body += "⚪ " + coin['name'].upper() + ": $" + str(round(coin['price'], 4))
-            body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
-            body += " | RSI: " + str(round(coin['rsi'], 1))
-            body += " | Score: " + str(coin['score']) + "\n"
-    else:
-        body += "Geen.\n"
-    
-    # 📊 STATISTIEKEN
-    body += "\n" + "=" * 80 + "\n"
-    body += "📊 SCAN STATISTIEKEN\n"
-    body += "=" * 80 + "\n\n"
-    
-    body += "Totaal gescand: " + str(len(COINS_TO_SCAN)) + " coins\n"
-    body += "Succesvol: " + str(len(all_results)) + " coins\n"
-    body += "Gefaald: " + str(len(failed)) + " coins\n"
-    body += "Top breakouts (8+): " + str(len(top_breakouts)) + "\n"
-    body += "Watchlist (5-7): " + str(len(watchlist)) + "\n"
-    
-    if failed:
-        body += "\n⚠️  Niet beschikbaar: " + ", ".join(failed)
-    
-    body += "\n\n" + "=" * 80 + "\n"
-    body += "💡 TIP: Houd deze coins in de gaten voor mogelijke breakouts!\n"
-    body += "Volgende scan: over 12 uur.\n"
-    
-    send_email(subject, body)
-    
-    print("\n✅ KLAAR! Email verstuurd.")
-    print("Top breakouts: " + str(len(top_breakouts)))
-    print("Watchlist: " + str(len(watchlist)))
-    if failed:
-        print("Gefaald: " + ", ".join(failed))
+all_results.sort(key=lambda x: x['score'], reverse=True)
+
+# 🟢 TOP BREAKOUTS (Score 8+)
+body += "🟢 TOP BREAKOUT KANDIDATEN (Score 8+):\n"
+body += "-" * 80 + "\n\n"
+
+top_breakouts = [r for r in all_results if r['score'] >= 8]
+
+if top_breakouts:
+    for i, coin in enumerate(top_breakouts[:10], 1):
+        body += str(i) + ". 🔥 " + coin['name'].upper() + " - Score: " + str(coin['score']) + "/15\n"
+        body += "   💰 Prijs: $" + str(round(coin['price'], 4)) + "\n"
+        body += "   📊 1d: " + str(round(coin['ch_1d'], 2)) + "%"
+        body += " | 3d: " + str(round(coin['ch_3d'], 2)) + "%"
+        body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%\n"
+        body += "   📈 RSI: " + str(round(coin['rsi'], 1))
+        body += " | " + coin['trend']
+        body += " | Distance: " + str(round(coin['distance_to_res'], 2)) + "%\n"
+        
+        if coin.get('is_consolidating', False):
+            body += "   📊 CONSOLIDATIE - Grote move komt eraan!\n"
+        
+        if coin['signals']:
+            body += "   ✅ Signalen: " + ", ".join(coin['signals']) + "\n"
+        
+        body += "\n"
+else:
+    body += "Geen sterke breakouts gevonden.\n"
+    body += "💡 De markt is rustig - wacht op betere kansen.\n\n"
+
+# 🟡 NEAR BREAKOUT WATCHLIST (Score 5-7)
+body += "\n🟡 NEAR BREAKOUT WATCHLIST (Score 5-7):\n"
+body += "-" * 80 + "\n\n"
+body += "💡 Deze coins komen DICHTBIJ een breakout - houd in de gaten!\n\n"
+
+near_breakouts = [r for r in all_results if 5 <= r['score'] < 8]
+
+if near_breakouts:
+    for coin in near_breakouts:
+        body += "⚡ " + coin['name'].upper() + ": $" + str(round(coin['price'], 4))
+        body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
+        body += " | RSI: " + str(round(coin['rsi'], 1))
+        body += " | Distance: " + str(round(coin['distance_to_res'], 2)) + "%\n"
+        
+        if coin.get('is_consolidating', False):
+            body += "   📊 Consolidatie fase - breakout kan elk moment komen!\n"
+        
+        if coin['signals']:
+            body += "   Signalen: " + ", ".join(coin['signals'][:2]) + "\n"
+        
+        body += "\n"
+else:
+    body += "Geen.\n"
+
+# 👁️ MONITORING (Score 3-4)
+body += "\n👁️  MONITORING (Score 3-4):\n"
+body += "-" * 80 + "\n\n"
+body += "🔍 Deze coins zijn interessant maar nog niet klaar voor breakout.\n\n"
+
+monitoring = [r for r in all_results if 3 <= r['score'] < 5]
+
+if monitoring:
+    for coin in monitoring:
+        body += "⚪ " + coin['name'].upper() + ": $" + str(round(coin['price'], 4))
+        body += " | 7d: " + str(round(coin['ch_7d'], 2)) + "%"
+        body += " | Score: " + str(coin['score']) + "\n"
+else:
+    body += "Geen.\n"
+
+# 📊 STATISTIEKEN
+body += "\n" + "=" * 80 + "\n"
+body += "📊 SCAN STATISTIEKEN\n"
+body += "=" * 80 + "\n\n"
+
+body += "Totaal gescand: " + str(len(COINS_TO_SCAN)) + " coins\n"
+body += "Succesvol: " + str(len(all_results)) + " coins\n"
+body += "Gefaald: " + str(len(failed)) + " coins\n"
+body += "Top breakouts (8+): " + str(len(top_breakouts)) + "\n"
+body += "Near breakouts (5-7): " + str(len(near_breakouts)) + "\n"
+body += "Monitoring (3-4): " + str(len(monitoring)) + "\n"
+
+if failed:
+    body += "\n⚠️  Niet beschikbaar: " + ", ".join(failed)
+
+body += "\n\n" + "=" * 80 + "\n"
+body += "💡 TIP: Houd Near Breakout coins in de gaten!\n"
+body += "Volgende scan: over 12 uur.\n"
+
+send_email(subject, body)
+
+print("\n✅ KLAAR! Email verstuurd.")
+print("Top breakouts: " + str(len(top_breakouts)))
+print("Near breakouts: " + str(len(near_breakouts)))
+print("Monitoring: " + str(len(monitoring)))
+if failed:
+    print("Gefaald: " + ", ".join(failed))
