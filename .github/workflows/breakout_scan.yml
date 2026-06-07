@@ -2,8 +2,10 @@ name: Breakout Scanner
 
 on:
   schedule:
-    - cron: '0 6 * * *'
-    - cron: '30 15 * * *'
+    - cron: '0 6 * * *'    # 08:00 NL
+    - cron: '10 6 * * *'   # 08:10 NL (backup)
+    - cron: '30 15 * * *'  # 17:30 NL
+    - cron: '40 15 * * *'  # 17:40 NL (backup)
   workflow_dispatch:
 
 jobs:
