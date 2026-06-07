@@ -112,7 +112,10 @@ def detect_breakout(df, coin_name):
     price = df['price'].iloc[-1]
     high_14d = df['price'].rolling(window=14).max().iloc[-1]
     low_14d = df['price'].rolling(window=14).min().iloc[-1]
+    high_7d = df['price'].rolling(window=7).max().iloc[-1]
     
+    # Bereken veranderingen
+    ch_1d = ((price - df['price'].iloc[-2]) / df['price'].iloc[-2]) * 100 if len(df) >= 2 else 0
     ch_3d = ((price - df['price'].iloc[-3]) / df['price'].iloc[-3]) * 100 if len(df) >= 3 else 0
     ch_7d = ((price - df['price'].iloc[-7]) / df['price'].iloc[-7]) * 100 if len(df) >= 7 else 0
     ch_14d = ((price - df['price'].iloc[-14]) / df['price'].iloc[-14]) * 100 if len(df) >= 14 else 0
@@ -120,61 +123,80 @@ def detect_breakout(df, coin_name):
     rsi = calc_rsi(df)
     trend = get_trend(df)
     
+    # Distance calculations
     distance_to_resistance = ((high_14d - price) / high_14d) * 100
     distance_from_support = ((price - low_14d) / low_14d) * 100
     
+    # Consolidatie detectie (lage volatiliteit)
+    if len(df) >= 14:
+        price_range = (high_14d - low_14d) / low_14d * 100
+        is_consolidating = price_range < 15  # Minder dan 15% range = consolidatie
+    else:
+        is_consolidating = False
+    
+    # Breakout score berekenen
     score = 0
     signals = []
     
-    # 1. Nabij resistance (binnen 5%)
+    # 1. Nabij resistance (binnen 5%) = IMMEDIATE BREAKOUT
     if 0 <= distance_to_resistance < 5:
-        score += 4
-        signals.append("Nabij resistance")
-    elif 0 <= distance_to_resistance < 10:
-        score += 2
-        signals.append("Dichtbij resistance")
-    
-    # 2. Opwaarts momentum
-    if ch_3d > 0 and ch_7d > 0:
+        score += 5
+        signals.append("🔥 Nabij resistance")
+    # 2. Dichtbij resistance (5-10%) = NEAR BREAKOUT
+    elif 5 <= distance_to_resistance < 10:
         score += 3
+        signals.append("🟡 Dichtbij resistance")
+    # 3. Binnen bereik (10-15%) = WATCH
+    elif 10 <= distance_to_resistance < 15:
+        score += 2
+        signals.append("⚠️  Binnen bereik")
+    
+    # 4. Opwaarts momentum
+    if ch_3d > 0 and ch_7d > 0:
+        score += 2
         signals.append("Opwaarts momentum")
     
-    # 3. Versnellend
+    # 5. Versnellend
     if ch_3d > ch_7d > ch_14d:
         score += 3
         signals.append("Versnellend")
     
-    # 4. Gezonde RSI
+    # 6. Gezonde RSI
     if 45 <= rsi <= 65:
         score += 2
         signals.append("Gezonde RSI")
     elif 30 <= rsi < 45:
         score += 1
+        signals.append("RSI herstelt")
     
-    # 5. Bullish trend
+    # 7. Bullish trend
     if trend == "BULLISH":
         score += 3
         signals.append("Bullish trend")
     
-    # 6. Boven EMA20
+    # 8. Boven EMA20
     if len(df) >= 20:
         ema20 = df['price'].ewm(span=20, adjust=False).mean().iloc[-1]
         if price > ema20 and (price - ema20) / ema20 < 0.05:
             score += 2
             signals.append("Boven EMA20")
     
-    # 7. Sterke 24u beweging
-    if len(df) >= 2:
-        ch_24h = ((price - df['price'].iloc[-2]) / df['price'].iloc[-2]) * 100
-        if ch_24h > 5:
-            score += 2
-            signals.append("Sterke 24u (+{:.1f}%)".format(ch_24h))
+    # 9. Consolidatie fase (grote move komt eraan!)
+    if is_consolidating and distance_to_resistance < 15:
+        score += 3
+        signals.append("📊 Consolidatie - breakout mogelijk!")
+    
+    # 10. Sterke 24u beweging
+    if ch_1d > 5:
+        score += 2
+        signals.append(f"Sterke 24u (+{ch_1d:.1f}%)")
     
     return {
         'name': coin_name,
         'price': price,
         'rsi': rsi,
         'trend': trend,
+        'ch_1d': ch_1d,
         'ch_3d': ch_3d,
         'ch_7d': ch_7d,
         'ch_14d': ch_14d,
@@ -183,7 +205,8 @@ def detect_breakout(df, coin_name):
         'high_14d': high_14d,
         'low_14d': low_14d,
         'score': score,
-        'signals': signals
+        'signals': signals,
+        'is_consolidating': is_consolidating
     }
 
 def send_email(subject, body):
