@@ -1,11 +1,10 @@
 name: Daily Crypto Report
 
-on:
   schedule:
-    - cron: '50 5 * * *'   # 07:50 NL
-    - cron: '00 6 * * *'   # 08:00 NL (backup)
-    - cron: '20 15 * * *'  # 17:20 NL
-    - cron: '30 15 * * *'  # 17:30 NL (backup)
+    - cron: '50 5 * * *'   # 07:50 NL (Hoofd)
+    - cron: '55 5 * * *'   # 07:55 NL (Backup) ← Aangepast!
+    - cron: '20 15 * * *'  # 17:20 NL (Hoofd)
+    - cron: '25 15 * * *'  # 17:25 NL (Backup) ← Aangepast!
   workflow_dispatch:
 
 jobs:
