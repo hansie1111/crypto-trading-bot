@@ -34,14 +34,14 @@ def get_data(coin_id, days=60):
     url = "https://api.coingecko.com/api/v3/coins/" + coin_id + "/market_chart"
     params = {'vs_currency': 'usd', 'days': days, 'interval': 'daily'}
     
-    for i in range(3):  # 3 pogingen
+    for i in range(2):  # 2 pogingen
         try:
-            time.sleep(6)  # Langere wachtijd
-            r = requests.get(url, params=params, timeout=20)
+            time.sleep(7)  # Langere wachtijd
+            r = requests.get(url, params=params, timeout=30)
             
             if r.status_code == 429:
-                print("Rate limit! Wacht 20 seconden...")
-                time.sleep(20)
+                print("Rate limit! Wacht 30 seconden...")
+                time.sleep(30)
                 continue
             
             if r.status_code == 200:
