@@ -19,6 +19,7 @@ COINS = {
     'render-token': 'RENDER',
     'avalanche-2': 'AVAX',
     'wormhole': 'W',
+    'litecoin': 'LTC',
     'near': 'NEAR',
     'renzo': 'REZ',
     'injective-protocol': 'INJ',
