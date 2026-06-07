@@ -1,7 +1,7 @@
 name: Breakout Scanner
 
 on:
-    schedule:
+  schedule:
     - cron: '0 6 * * *'    # 08:00 NL (Hoofd)
     - cron: '10 6 * * *'   # 08:10 NL (Backup)
     - cron: '30 15 * * *'  # 17:30 NL (Hoofd)
