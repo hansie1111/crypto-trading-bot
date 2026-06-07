@@ -30,18 +30,21 @@ COINS = {
     'ethereum-name-service': 'ENS'
 }
 
-def get_data(coin_id, days=60):
+def get_data(coin_id, days=30):
     url = "https://api.coingecko.com/api/v3/coins/" + coin_id + "/market_chart"
     params = {'vs_currency': 'usd', 'days': days, 'interval': 'daily'}
     
-    for i in range(2):  # 2 pogingen
+    # 3 pogingen om de data op te halen
+    for attempt in range(3):
         try:
-            time.sleep(7)  # Langere wachtijd
-            r = requests.get(url, params=params, timeout=30)
+            time.sleep(5)  # Normaal 5 seconden wachten (snel!)
             
+            r = requests.get(url, params=params, timeout=20)
+            
+            # 🚨 RATE LIMIT DETECTIE
             if r.status_code == 429:
-                print("Rate limit! Wacht 30 seconden...")
-                time.sleep(30)
+                print("    ⚠️ Rate limit! Wacht 60 seconden en probeer opnieuw...")
+                time.sleep(60)  # Lang wachten om de limiet te resetten
                 continue
             
             if r.status_code == 200:
@@ -51,9 +54,14 @@ def get_data(coin_id, days=60):
                     df['time'] = pd.to_datetime(df['time'], unit='ms')
                     df.set_index('time', inplace=True)
                     return df
+                else:
+                    return None
+            else:
+                return None
+                
         except Exception as e:
-            print("Fout bij " + coin_id + ": " + str(e))
-            time.sleep(3)
+            print("    ✗ Fout: " + str(e))
+            time.sleep(10)
     
     return None
 
