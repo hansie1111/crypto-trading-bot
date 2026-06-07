@@ -35,12 +35,12 @@ def get_data(coin_id, days=60):
     
     for i in range(3):  # 3 pogingen
         try:
-            time.sleep(3)  # Langere wachtijd
-            r = requests.get(url, params=params, timeout=15)
+            time.sleep(6)  # Langere wachtijd
+            r = requests.get(url, params=params, timeout=20)
             
             if r.status_code == 429:
-                print("Rate limit! Wacht 15 seconden...")
-                time.sleep(15)
+                print("Rate limit! Wacht 20 seconden...")
+                time.sleep(20)
                 continue
             
             if r.status_code == 200:
