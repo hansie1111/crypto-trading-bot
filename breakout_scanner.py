@@ -79,15 +79,31 @@ def calc_rsi(df, period=14):
 def get_trend(df):
     if len(df) < 20:
         return "NEUTRAAL"
+    
     price = df['price'].iloc[-1]
     ema20 = df['price'].ewm(span=20, adjust=False).mean().iloc[-1]
     ema50 = df['price'].ewm(span=50, adjust=False).mean().iloc[-1] if len(df) >= 50 else ema20
     
+    # Bereken korte-termijn momentum
+    ch_24h = ((price - df['price'].iloc[-2]) / df['price'].iloc[-2]) * 100 if len(df) >= 2 else 0
+    ch_3d = ((price - df['price'].iloc[-3]) / df['price'].iloc[-3]) * 100 if len(df) >= 3 else 0
+    
+    # Sterke 24u stijging = minstens NEUTRAAL
+    if ch_24h > 10:
+        return "BULLISH"  # Sterke stijging!
+    elif ch_24h > 5:
+        if price > ema20:
+            return "BULLISH"
+        else:
+            return "NEUTRAAL"  # Herstel maar nog niet boven EMA
+    
+    # Traditionele EMA logica
     if price > ema20 > ema50:
         return "BULLISH"
     elif price < ema20 < ema50:
         return "BEARISH"
-    return "NEUTRAAL"
+    else:
+        return "NEUTRAAL"
 
 def detect_breakout(df, coin_name):
     if df is None or len(df) < 14:
